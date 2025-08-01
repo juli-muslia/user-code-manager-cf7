@@ -45,8 +45,8 @@ Recommended fields:
 Add the following fields to your Contact Form 7 form:
 
 ```html
-[email* user-email]
-[text* invitation-code]
+[dynamic_text* first_name placeholder:First%20Name "ucm_acf_field key='your_acf_field_name'"]
+[dynamic_email* e-mail placeholder:E-Mail "ucm_acf_field key='your_acf_email_field_name'"]
 ```
 
 To make the invitation code field hidden, use:

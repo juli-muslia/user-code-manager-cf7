@@ -9,6 +9,14 @@
  */
 if (!defined('ABSPATH')) exit;
 require_once plugin_dir_path(__FILE__) . 'includes/qrlib.php';
+require_once __DIR__ . '/vendor/autoload.php';
+
+use Endroid\QrCode\Builder\Builder;
+use Endroid\QrCode\Encoding\Encoding;
+use Endroid\QrCode\ErrorCorrectionLevel;
+use Endroid\QrCode\RoundBlockSizeMode;
+use Endroid\QrCode\Writer\PngWriter;
+use Endroid\QrCode\Color\Color;
 
 add_action('admin_enqueue_scripts', 'ucm_enqueue_admin_styles');
 function ucm_enqueue_admin_styles($hook) {
@@ -89,9 +97,13 @@ echo'<h1>User Code Manager for Contact Form 7 - Configuration Guide</h1>
       <h3>Step 3: Create Contact Form 7 Form</h3>
       <p>Add these fields to your CF7 form:</p>
       <br />
-      <pre><code>[email* user-email]<br>[text* invitation-code]</code></pre>
+      <pre><code>[dynamic_text* first-name placeholder:Nachname "ucm_acf_field key=\'nachname\'"]</code></pre>
+        <pre><code>[dynamic_text* last-name placeholder:Vorname "ucm_acf_field key=\'vorname\'"]</code></pre>
+        <pre><code>[dynamic_email* e-mail placeholder:E-Mail "ucm_acf_field key=\'email\'"]</code></pre>
+        <pre><code>[dynamic_hidden* invitation-code "ucm_acf_field key=\'einladungs_code\'"]</code></pre> 
+        Change the field names to match your ACF fields.
       <p>You can make the invitation code field hidden using:</p>
-      <pre><code>[hidden invitation-code ""]</code></pre>
+      <pre><code>[dynamic_hidden* invitation-code ""]</code></pre>
     </div>
 
     <div class="step">
@@ -656,76 +668,103 @@ function ucm_generate_all_qr_codes() {
 
     // QR code generator
     if (!function_exists('generate_qr_code')) {
-        function generate_qr_code($post_id, $unique_url, $acf_first_name, $acf_last_name, $acf_qr_code) {
-            if (!class_exists('QRcode')) {
-                error_log('QRcode class not found. Make sure the QR library is loaded.');
-                return;
-            }
 
-            $first_name = get_field($acf_first_name, $post_id) ?: 'first';
-            $last_name  = get_field($acf_last_name, $post_id) ?: 'last';
-
-            $filename = sanitize_title($first_name) . '-' . sanitize_title($last_name) . '-' . $post_id . '.png';
-            $upload_dir = wp_upload_dir();
-            $filepath = $upload_dir['path'] . '/' . $filename;
-
-            // Generate QR code PNG file
-            QRcode::png($unique_url, $filepath, QR_ECLEVEL_L, 16);
-
-            if (!file_exists($filepath) || filesize($filepath) < 100) {
-                error_log("Failed to generate valid QR code image for post $post_id");
-                return;
-            }
-            error_log("QR code saved to: $filepath");
-
-            // Delete old QR code attachment
-            $old_id = get_field($acf_qr_code, $post_id);
-            if ($old_id) {
-                wp_delete_attachment($old_id, true);
-            }
-
-            // Attach new QR code image to media library
-            $filetype = wp_check_filetype($filename, null);
-            if (empty($filetype['type'])) {
-                $filetype['type'] = 'image/png'; // Fallback MIME type
-            }
-
-            $attachment = [
-                'post_mime_type' => $filetype['type'],
-                'post_title'     => 'QR Code ' . $post_id,
-                'post_content'   => '',
-                'post_status'    => 'inherit',
-            ];
-
-            $attach_id = wp_insert_attachment($attachment, $filepath, $post_id);
-
-            if (is_wp_error($attach_id)) {
-                error_log('Failed to insert attachment for QR code: ' . $attach_id->get_error_message());
-                return;
-            }
-
-            require_once(ABSPATH . 'wp-admin/includes/image.php');
-            $attach_data = wp_generate_attachment_metadata($attach_id, $filepath);
-            wp_update_attachment_metadata($attach_id, $attach_data);
-            update_field($acf_qr_code, $attach_id, $post_id);
-
-            error_log("QR code attached to post $post_id: ID $attach_id");
-        }
+function generate_qr_code($post_id, $unique_url, $acf_first_name, $acf_last_name, $acf_qr_code) {
+    // Check if QR code already exists
+    $existing_qr_code = get_field($acf_qr_code, $post_id);
+    if ($existing_qr_code) {
+        // If QR code exists, skip generating a new one
+        error_log("QR code already exists for post $post_id. Skipping QR code generation.");
+        return;
     }
 
-    foreach ($posts as $post_id) {
-        $uuid = get_post_meta($post_id, $acf_uuid_code, true);
+    // Get the first name and last name from ACF fields (default to 'first' and 'last' if not found)
+    $first_name = get_field($acf_first_name, $post_id) ?: 'first';
+    $last_name  = get_field($acf_last_name, $post_id) ?: 'last';
 
-        if (!$uuid) {
-            $uuid = generate_uuid_v4();
-            update_post_meta($post_id, $acf_uuid_code, $uuid);
-           
-        }
+    // Sanitize the filename based on the first name, last name, and post ID
+    $filename = sanitize_title($first_name) . '-' . sanitize_title($last_name) . '-' . $post_id . '.png';
+    $upload_dir = wp_upload_dir();
+    $filepath = $upload_dir['path'] . '/' . $filename;
 
-        $unique_url = add_query_arg('invitation_uuid', $uuid, site_url($cf7_page));
-        update_field($acf_invitation_url, $unique_url, $post_id);
-        generate_qr_code($post_id, $unique_url, $acf_first_name, $acf_last_name, $acf_qr_code);
+    // Set the QR code parameters without the logo
+    $writer = new PngWriter();
+    
+    $builder = new Builder(
+        writer: $writer,
+        writerOptions: [],
+        validateResult: false,
+        data: $unique_url,
+        encoding: new Encoding('UTF-8'),
+        errorCorrectionLevel: ErrorCorrectionLevel::High,
+        size: 300,
+        margin: 10,
+        roundBlockSizeMode: RoundBlockSizeMode::Margin
+    );
+
+    // Build the QR code
+    $result = $builder->build();
+
+    // Save it to the file system
+    $result->saveToFile($filepath);
+
+    // Check if the file was successfully generated
+    if (!file_exists($filepath) || filesize($filepath) < 100) {
+        error_log("Failed to generate valid QR code image for post $post_id");
+        return;
     }
+    error_log("QR code saved to: $filepath");
+
+    // Delete old QR code attachment if it exists
+    $old_id = get_field($acf_qr_code, $post_id);
+    if ($old_id) {
+        wp_delete_attachment($old_id, true);
+    }
+
+    // Attach the new QR code image to the media library
+    $filetype = wp_check_filetype($filename, null);
+
+    // Prepare attachment data
+    $attachment = [
+        'post_mime_type' => $filetype['type'],
+        'post_title'     => 'QR Code ' . $post_id,
+        'post_content'   => '',
+        'post_status'    => 'inherit',
+    ];
+
+    // Insert the attachment into the media library
+    $attach_id = wp_insert_attachment($attachment, $filepath, $post_id);
+
+    // If the attachment was created successfully, generate metadata and update the post
+    if (!is_wp_error($attach_id)) {
+        require_once(ABSPATH . 'wp-admin/includes/image.php');
+        $attach_data = wp_generate_attachment_metadata($attach_id, $filepath);
+        wp_update_attachment_metadata($attach_id, $attach_data);
+
+        // Update the ACF qr_code field with the new attachment ID
+        update_field($acf_qr_code, $attach_id, $post_id);
+    }
+
+    error_log("QR code attached to post $post_id: ID $attach_id");
+}
+
+    }
+
+foreach ($posts as $post_id) {
+    $uuid = get_post_meta($post_id, $acf_uuid_code, true);
+
+    if (!$uuid) {
+        $uuid = generate_uuid_v4();
+        update_post_meta($post_id, $acf_uuid_code, $uuid);
+    }
+
+    $unique_url = add_query_arg('invitation_uuid', $uuid, site_url($cf7_page));
+    update_field($acf_invitation_url, $unique_url, $post_id);
+    
+    // This line ensures QR code generation happens only if it doesn't exist already
+    generate_qr_code($post_id, $unique_url, $acf_first_name, $acf_last_name, $acf_qr_code);
+}
+
 
     wp_send_json_success(['message' => 'All UUIDs, URLs, and QR codes generated']);
 }

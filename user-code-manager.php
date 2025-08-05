@@ -713,7 +713,7 @@ function generate_qr_code($post_id, $unique_url, $acf_first_name, $acf_last_name
         error_log("Failed to generate valid QR code image for post $post_id");
         return;
     }
-    error_log("QR code saved to: $filepath");
+    //error_log("QR code saved to: $filepath");
 
     // Delete old QR code attachment if it exists
     $old_id = get_field($acf_qr_code, $post_id);
@@ -745,7 +745,7 @@ function generate_qr_code($post_id, $unique_url, $acf_first_name, $acf_last_name
         update_field($acf_qr_code, $attach_id, $post_id);
     }
 
-    error_log("QR code attached to post $post_id: ID $attach_id");
+   // error_log("QR code attached to post $post_id: ID $attach_id");
 }
 
     }

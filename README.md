@@ -1,20 +1,17 @@
 # User Code Manager for Contact Form 7 – Configuration Guide
 
-## Plugin Requirements
+<div class="intro">
+    <div class="info">
+        **Plugin Requirements:**
+        - Contact Form 7
+        - Contact Form 7 Dynamic Text Extension
+        - Advanced Custom Fields (ACF)
+        - ACF Admin Columns
+    </div>
 
-Make sure the following plugins are installed and activated:
+    ## Setup Instructions
 
-- Contact Form 7
-- Contact Form 7 Dynamic Text Extension
-- Advanced Custom Fields (ACF)
-- ACF Admin Columns
-
----
-
-## Setup Instructions
-
-### Step 1: Create ACF Post Type
-
+    ### Step 1: Create ACF Post Type
     1. Go to **Custom Post Types → Add New**
     2. Create a new post type (e.g., `Invitations`)
     3. **Note the post type slug** – you'll need this later
@@ -44,7 +41,7 @@ Make sure the following plugins are installed and activated:
     To make the invitation code field hidden, use:
 
     ```html
-    [ynamic_hidden* invitation-code ""]
+    [dynamic_hidden* invitation-code ""]
     ```
 
     ### Step 4: Configure Plugin Settings
@@ -83,3 +80,5 @@ Make sure the following plugins are installed and activated:
 
     ## 🔁 Backup Reminder
     **Always backup your data** before performing bulk operations like resetting codes or generating new URLs.
+
+</div>
